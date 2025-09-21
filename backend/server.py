@@ -44,6 +44,63 @@ class StatusCheckCreate(BaseModel):
     client_name: str
 
 
+# Food Truck Models
+class MenuItem(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    description: str
+    price: float
+    category: str
+    image_url: Optional[str] = None
+    available: bool = True
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class MenuItemCreate(BaseModel):
+    name: str
+    description: str
+    price: float
+    category: str
+    image_url: Optional[str] = None
+    available: bool = True
+
+class Location(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    address: str
+    latitude: float
+    longitude: float
+    schedule: Optional[str] = None
+    active: bool = True
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class LocationCreate(BaseModel):
+    name: str
+    address: str
+    latitude: float
+    longitude: float
+    schedule: Optional[str] = None
+    active: bool = True
+
+class FoodTruckInfo(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    description: str
+    phone: str
+    email: Optional[str] = None
+    social_media: Optional[dict] = None
+    logo_url: Optional[str] = None
+    banner_url: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class FoodTruckInfoCreate(BaseModel):
+    name: str
+    description: str
+    phone: str
+    email: Optional[str] = None
+    social_media: Optional[dict] = None
+    logo_url: Optional[str] = None
+    banner_url: Optional[str] = None
+
 # AI agent models
 class ChatRequest(BaseModel):
     message: str
@@ -89,6 +146,163 @@ async def create_status_check(input: StatusCheckCreate):
 async def get_status_checks():
     status_checks = await db.status_checks.find().to_list(1000)
     return [StatusCheck(**status_check) for status_check in status_checks]
+
+
+# Food Truck routes
+@api_router.get("/foodtruck", response_model=FoodTruckInfo)
+async def get_food_truck_info():
+    info = await db.food_truck_info.find_one()
+    if not info:
+        # Return default info if none exists
+        default_info = {
+            "id": str(uuid.uuid4()),
+            "name": "Tasty Wheels Food Truck",
+            "description": "Serving delicious street food with fresh ingredients and bold flavors",
+            "phone": "(555) 123-4567",
+            "email": "info@tastywheels.com",
+            "social_media": {
+                "instagram": "@tastywheels",
+                "facebook": "TastyWheelsFoodTruck"
+            },
+            "created_at": datetime.utcnow()
+        }
+        return FoodTruckInfo(**default_info)
+    return FoodTruckInfo(**info)
+
+@api_router.put("/foodtruck", response_model=FoodTruckInfo)
+async def update_food_truck_info(info: FoodTruckInfoCreate):
+    existing = await db.food_truck_info.find_one()
+    info_dict = info.dict()
+
+    if existing:
+        info_dict["id"] = existing["id"]
+        info_dict["created_at"] = existing["created_at"]
+        await db.food_truck_info.replace_one({"id": existing["id"]}, info_dict)
+    else:
+        info_obj = FoodTruckInfo(**info_dict)
+        await db.food_truck_info.insert_one(info_obj.dict())
+        return info_obj
+
+    return FoodTruckInfo(**info_dict)
+
+# Menu routes
+@api_router.get("/menu", response_model=List[MenuItem])
+async def get_menu():
+    menu_items = await db.menu_items.find().to_list(1000)
+    if not menu_items:
+        # Return sample menu if none exists
+        sample_menu = [
+            {
+                "id": str(uuid.uuid4()),
+                "name": "Gourmet Burger",
+                "description": "Juicy beef patty with fresh lettuce, tomato, and our special sauce",
+                "price": 12.99,
+                "category": "Burgers",
+                "available": True,
+                "created_at": datetime.utcnow()
+            },
+            {
+                "id": str(uuid.uuid4()),
+                "name": "Fish Tacos",
+                "description": "Crispy fish with cabbage slaw and lime crema in soft tortillas",
+                "price": 9.99,
+                "category": "Tacos",
+                "available": True,
+                "created_at": datetime.utcnow()
+            },
+            {
+                "id": str(uuid.uuid4()),
+                "name": "Loaded Fries",
+                "description": "Crispy fries topped with cheese, bacon, and green onions",
+                "price": 7.99,
+                "category": "Sides",
+                "available": True,
+                "created_at": datetime.utcnow()
+            }
+        ]
+        return [MenuItem(**item) for item in sample_menu]
+    return [MenuItem(**item) for item in menu_items]
+
+@api_router.post("/menu", response_model=MenuItem)
+async def create_menu_item(item: MenuItemCreate):
+    item_obj = MenuItem(**item.dict())
+    await db.menu_items.insert_one(item_obj.dict())
+    return item_obj
+
+@api_router.put("/menu/{item_id}", response_model=MenuItem)
+async def update_menu_item(item_id: str, item: MenuItemCreate):
+    item_dict = item.dict()
+    existing = await db.menu_items.find_one({"id": item_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Menu item not found")
+
+    item_dict["id"] = item_id
+    item_dict["created_at"] = existing["created_at"]
+    await db.menu_items.replace_one({"id": item_id}, item_dict)
+    return MenuItem(**item_dict)
+
+@api_router.delete("/menu/{item_id}")
+async def delete_menu_item(item_id: str):
+    result = await db.menu_items.delete_one({"id": item_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Menu item not found")
+    return {"success": True, "message": "Menu item deleted"}
+
+# Location routes
+@api_router.get("/locations", response_model=List[Location])
+async def get_locations():
+    locations = await db.locations.find().to_list(1000)
+    if not locations:
+        # Return sample locations if none exist
+        sample_locations = [
+            {
+                "id": str(uuid.uuid4()),
+                "name": "Downtown Plaza",
+                "address": "123 Main St, Downtown",
+                "latitude": 40.7128,
+                "longitude": -74.0060,
+                "schedule": "Mon-Fri: 11:30AM-2:30PM",
+                "active": True,
+                "created_at": datetime.utcnow()
+            },
+            {
+                "id": str(uuid.uuid4()),
+                "name": "Business District",
+                "address": "456 Corporate Blvd",
+                "latitude": 40.7580,
+                "longitude": -73.9855,
+                "schedule": "Mon-Fri: 12:00PM-3:00PM",
+                "active": True,
+                "created_at": datetime.utcnow()
+            }
+        ]
+        return [Location(**loc) for loc in sample_locations]
+    return [Location(**loc) for loc in locations]
+
+@api_router.post("/locations", response_model=Location)
+async def create_location(location: LocationCreate):
+    location_obj = Location(**location.dict())
+    await db.locations.insert_one(location_obj.dict())
+    return location_obj
+
+@api_router.put("/locations/{location_id}", response_model=Location)
+async def update_location(location_id: str, location: LocationCreate):
+    location_dict = location.dict()
+    existing = await db.locations.find_one({"id": location_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Location not found")
+
+    location_dict["id"] = location_id
+    location_dict["created_at"] = existing["created_at"]
+    await db.locations.replace_one({"id": location_id}, location_dict)
+    return Location(**location_dict)
+
+@api_router.delete("/locations/{location_id}")
+async def delete_location(location_id: str):
+    result = await db.locations.delete_one({"id": location_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Location not found")
+    return {"success": True, "message": "Location deleted"}
 
 
 # AI agent routes
